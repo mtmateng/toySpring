@@ -33,11 +33,13 @@ public class ToyInnerContext {
 
         List<Class<?>> classes = ClassUtils.getAllClassByAnnotations(ComponentAnnotations.COMPONENT_ANNOTATIONS, getComponentScanPackageName(mainClass));
 
-        //第一遍扫描，将所有的类的类型元数据先注册到上下文里
+        // 第一遍扫描，将所有的类的类型元数据先注册到上下文里
+        // 先把所有的标注了@Component类注解的类都扫描到上下文里
         for (Class<?> aClass : classes) {
             registerBean(getManagedBeanId(aClass), aClass, aClass.isAnnotationPresent(ToyPrimary.class));
         }
 
+        // 再从这些@Component类中找出带有@Bean标注的方法
         Map<String, Method> beanId2BeanGenerationMethod = ClassUtils.getBeanGenerationMethods(classes, mainClass);
         for (String beanId : beanId2BeanGenerationMethod.keySet()) {
             registerBeanMethod(beanId, beanId2BeanGenerationMethod.get(beanId));
@@ -46,34 +48,33 @@ public class ToyInnerContext {
         }
 
         //开始第二遍扫描，构建BeanProperty
-        for (String beanId : beanId2BeanType.keySet()) {
-            registerBeanPropertyByClass(beanId, beanId2BeanType.get(beanId));
-        }
-        for (String beanId : beanId2BeanMethod.keySet()) {
-            registerBeanPropertyByMethod(beanId, beanId2BeanMethod.get(beanId));
-        }
+        beanId2BeanType.forEach(this::registerBeanPropertyByClass);
+        beanId2BeanMethod.forEach(this::registerBeanPropertyByMethod);
 
         //接下来生成图，生成bean，完成这个拼图
-        List<String> sortedBeanIds = buildDAG(classes);
+        List<String> sortedBeanIds = buildDAG();
         instanceBean(sortedBeanIds);
 
     }
 
+    /**
+     * 按顺序实例化Bean，分为两步，第一步是先实例化、同时注入必须依赖
+     * 第二步是把非必须依赖注入，即Field依赖。
+     */
     private void instanceBean(List<String> sortedBeanIds) {
 
         for (String beanId : sortedBeanIds) {
             BeanProperty beanProperty = beanId2BeanProperty.get(beanId);
-
         }
 
     }
 
     /**
-     * 将需要管理的类构建成一个有向无环图，之后pia成一个有序集合，一个一个初始化。这样当我们初始化某个类时，我们就能确信它的依赖类都已经初始化好了
-     * @param classes 需要容器管理的类
-     * @return 确保被依赖类在前的一个有序列表，这是依赖的名字
+     * 将需要管理的类构建成一个有向无环图，之后顺序化为一个有序集合，一个一个初始化。
+     * 这样当我们初始化某个类时，我们就能确信它的依赖类都已经初始化好了
+     * @return 确保被依赖类在前的一个有序列表，这是Bean的Id
      */
-    private List<String> buildDAG(List<Class<?>> classes) {
+    private List<String> buildDAG() {
 
         Map<String, Set<String>> graph = new HashMap<>();   //value 为 key 直接依赖的类，全部为ID
         for (String beanId : beanId2BeanProperty.keySet()) {
@@ -144,9 +145,11 @@ public class ToyInnerContext {
     private void registerBeanPropertyByClass(String beanId, Class domainClass) {
 
         BeanProperty beanProperty = new BeanProperty();
+        Constructor constructor = getTheConstructor(domainClass);
+        beanProperty.setConstructor(constructor);
         beanProperty.setBeanId(BeanNameUtils.getComponentId(domainClass));
         beanProperty.setBeanType(domainClass);
-        beanProperty.setNecessaryDependencies(getConstructorDependency(domainClass));
+        beanProperty.setNecessaryDependencies(getConstructorDependency(constructor));
         beanProperty.setFieldDependencies(Arrays.stream(domainClass.getDeclaredFields())
             .filter(field -> field.isAnnotationPresent(ToyAutowired.class)).map(Field::getType)
             .map(fieldClass -> {
@@ -174,6 +177,7 @@ public class ToyInnerContext {
                 }
             }).collect(Collectors.toSet()));
         beanProperty.setFieldDependencies(Collections.emptySet());
+        beanProperty.setMethod(method);
         beanId2BeanProperty.put(beanId, beanProperty);
 
     }
@@ -221,10 +225,9 @@ public class ToyInnerContext {
      * 此处的策略是：仅查看构造函数的参数，如果只有一个构造函数，那就看构造函数的类型，如果有多个构造函数，那就看是否有一个标注了@Autowired
      * 如果多个标注了Autowired，或者都没有标注Autowired，就出错。
      */
-    private Set<String> getConstructorDependency(Class aClass) {
+    private Set<String> getConstructorDependency(Constructor constructor) {
 
         Set<String> dependencies = new HashSet<>();
-        Constructor constructor = getTheConstructor(aClass);
         Parameter[] parameters = constructor.getParameters();
         for (Parameter parameter : parameters) {
             dependencies.add(getParameterRequireBeanName(parameter));

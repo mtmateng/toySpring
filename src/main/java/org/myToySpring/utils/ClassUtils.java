@@ -29,6 +29,9 @@ public class ClassUtils {
 
     }
 
+    /**
+     * 把某个包及其子包下面所有标注有annotations里某个annotation的类全部找出来。
+     */
     public static List<Class<?>> getAllClassByAnnotations(Set<Class> annotations, String packageName) {
 
         List<Class<?>> returnList = new ArrayList<>();
@@ -61,7 +64,10 @@ public class ClassUtils {
             for (Method declaredMethod : component.getDeclaredMethods()) {
                 if (declaredMethod.isAnnotationPresent(ToyBean.class)) {
                     String beanName = getBeanName(declaredMethod);
-                    result.put(beanName, declaredMethod);
+                    if (result.putIfAbsent(beanName, declaredMethod) != null) {
+                        throw new ContextInitException(String.format("在初始化%s时出现了同名Bean,method是%s:%s()"
+                                , beanName, declaredMethod.getDeclaringClass().getName(), declaredMethod.getName()));
+                    }
                 }
             }
         }
@@ -96,7 +102,7 @@ public class ClassUtils {
 
 
     private static List<Class<?>> findClass(File directory, String packageName)
-        throws ClassNotFoundException {
+            throws ClassNotFoundException {
         List<Class<?>> classes = new ArrayList<>();
         if (!directory.exists()) {
             return classes;

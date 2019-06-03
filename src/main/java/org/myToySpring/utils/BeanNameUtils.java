@@ -1,12 +1,10 @@
 package org.myToySpring.utils;
 
 import org.myToySpring.annotations.*;
-import org.myToySpring.context.ToySpringContext;
 import org.myToySpring.exceptions.ContextInitException;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
-import java.lang.reflect.Parameter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -31,7 +29,7 @@ public class BeanNameUtils {
         } else if (names.size() == 1) {
             return names.get(0);
         } else {
-            return lowerCaseName(aClass.getSimpleName());
+            return lowerCaseFirstChar(aClass.getSimpleName());
         }
     }
 
@@ -39,12 +37,12 @@ public class BeanNameUtils {
         ToyBean toyBean = beanMethod.getAnnotation(ToyBean.class);
         String name = toyBean.name();
         if ("".equals(name)) {
-            name = lowerCaseName(beanMethod.getName());
+            name = lowerCaseFirstChar(beanMethod.getName());
         }
         return name;
     }
 
-    private static String lowerCaseName(String name) {
+    private static String lowerCaseFirstChar(String name) {
         if (name == null || name.equals("")) {
             return name;
         }
