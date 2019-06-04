@@ -5,6 +5,7 @@ import lombok.Data;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 这玩意用来定义一个受管理的Bean的一些属性
@@ -23,11 +24,11 @@ public class BeanProperty {
      * Spring的@Autowired有是否允许null的选项，我们的这个玩具项目也会提供。
      */
     private List<String> necessaryDependencies;             // 构造器依赖的beanId
-    private List<String> fieldDependencies;                 // 域构造器依赖的beanId
-    private boolean fieldDependenciesMeet = false;          // 域构造器依赖已经满足
+    private Map<String, String> field2Dependencies;         // 域构造器依赖的beanId
     private Constructor constructor;                        // 构造函数
     private Method method;                                  // 或者生成该Bean的方法
-    private String methodRestedComponentId;                 // bean生成的那个实体的ID
+    private String methodRestBeanId;                        // 如果是@Bean的方法生成的，那么这里保存声明这个方法的beanId
+    private boolean primary;
 
     public enum BeanGenerateType {
         Component,

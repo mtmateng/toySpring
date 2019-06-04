@@ -8,4 +8,7 @@ import java.lang.annotation.Target;
 @Target({ElementType.PARAMETER, ElementType.CONSTRUCTOR, ElementType.FIELD})
 @Retention(RetentionPolicy.RUNTIME)
 public @interface ToyAutowired {
+
+    boolean nullable() default false;
+
 }

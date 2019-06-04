@@ -36,8 +36,8 @@ public class ClassUtils {
 
         List<Class<?>> returnList = new ArrayList<>();
         for (Class child : getAllClassInPackage(packageName)) {
-            for (Annotation annotation : child.getAnnotations()) {
-                if (annotations.contains(annotation.getClass())) {
+            for (Class annotation : annotations) {
+                if (child.isAnnotationPresent(annotation)){
                     returnList.add(child);
                     break;
                 }

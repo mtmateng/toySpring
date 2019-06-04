@@ -1,5 +1,6 @@
 package org.myToySpring.runner;
 
+import lombok.Getter;
 import org.myToySpring.annotations.ToyAutowired;
 import org.myToySpring.annotations.ToyComponentScan;
 import org.myToySpring.annotations.ToyPrimary;
@@ -11,7 +12,10 @@ import org.myToySpring.helper.BeanProperty;
 import org.myToySpring.utils.BeanNameUtils;
 import org.myToySpring.utils.ClassUtils;
 
-import java.lang.reflect.*;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.lang.reflect.Parameter;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -21,15 +25,22 @@ import java.util.stream.Collectors;
  * 因为当第一遍扫描时，某个Bean的依赖Bean可能还没扫描到，无法决定其属性，因此实际需要扫描两遍
  * 第一遍建立基本信息，第二遍开始构建BeanProperty，即真正的bean属性和依赖关系类。
  */
-public class ToyInnerContext {
+class ToyInnerContext {
 
+    @Getter
     private final Map<String, BeanProperty> beanId2BeanProperty = new HashMap<>();
     private final Map<String, Class> beanId2BeanType = new HashMap<>();
     private final Map<String, Method> beanId2BeanMethod = new HashMap<>();
     private final Map<Class, List<String>> beanType2BeanIds = new HashMap<>();
     private final Map<Class, String> beanType2Primary = new HashMap<>();
 
-    public void scanAndRegisterBeans(Class<?> mainClass) {
+    ToyInnerContext(Class<?> mainClass) {
+
+        scanAndRegisterBeans(mainClass);
+
+    }
+
+    private void scanAndRegisterBeans(Class<?> mainClass) {
 
         List<Class<?>> classes = ClassUtils.getAllClassByAnnotations(ComponentAnnotations.COMPONENT_ANNOTATIONS, getComponentScanPackageName(mainClass));
 
@@ -63,6 +74,7 @@ public class ToyInnerContext {
      */
     private void instanceBean(List<String> sortedBeanIds) {
 
+        // 这一步是实例化所有的Bean
         for (String beanId : sortedBeanIds) {
             BeanProperty beanProperty = beanId2BeanProperty.get(beanId);
             switch (beanProperty.getBeanGenerateType()) {
@@ -75,6 +87,19 @@ public class ToyInnerContext {
                 default:
                     throw new ContextInitException("beanProperty的type有误，请检查");
             }
+        }
+        // 注入非必须依赖
+        for (String beanId : sortedBeanIds) {
+            BeanProperty beanProperty = beanId2BeanProperty.get(beanId);
+            beanProperty.getField2Dependencies().forEach((k, v) -> {
+                try {
+                    Field field = beanProperty.getBeanType().getDeclaredField(k);
+                    field.setAccessible(true);
+                    field.set(beanProperty.getBean(), beanId2BeanProperty.get(v).getBean());
+                } catch (Exception e) {
+                    throw new ContextInitException(String.format("注入非必须依赖:%s时出错", k), e);
+                }
+            });
         }
 
     }
@@ -90,12 +115,13 @@ public class ToyInnerContext {
     }
 
     private void instanceBeanByMethodBean(BeanProperty beanProperty) {
-        Object[] params = beanProperty.getNecessaryDependencies().stream()
+        Object[] params = beanProperty.getNecessaryDependencies().stream().filter(s -> !beanProperty.getMethodRestBeanId().equals(s))
                 .map(beanId -> beanId2BeanProperty.get(beanId).getBean()).toArray();
         try {
-            beanProperty.setBean(beanProperty.getMethod().invoke(params));
+            beanProperty.setBean(beanProperty.getMethod()
+                    .invoke(beanId2BeanProperty.get(beanProperty.getMethodRestBeanId()).getBean(), params));
         } catch (Exception e) {
-            throw new ContextInitException(String.format("实例化Bean %s:%s 时出错", beanProperty.getBeanId(), beanProperty.getBeanType().getName()));
+            throw new ContextInitException(String.format("实例化Bean %s:%s 时出错", beanProperty.getBeanId(), beanProperty.getBeanType().getName()), e);
         }
     }
 
@@ -122,7 +148,7 @@ public class ToyInnerContext {
                 }
             }
             if (zeroInDegreeClasses.isEmpty()) {
-                throw new ContextInitException("组建Bean时发生环装依赖，请检查");
+                throw new ContextInitException(String.format("组建Bean时发生环装依赖，请检查；相关类是%s", String.join(",", graph.keySet())));
             }
             for (String shouldRemove : zeroInDegreeClasses) {
                 graph.remove(shouldRemove);
@@ -181,15 +207,9 @@ public class ToyInnerContext {
         beanProperty.setBeanId(BeanNameUtils.getComponentId(domainClass));
         beanProperty.setBeanType(domainClass);
         beanProperty.setNecessaryDependencies(getConstructorDependency(constructor));
-        beanProperty.setFieldDependencies(Arrays.stream(domainClass.getDeclaredFields())
-                .filter(field -> field.isAnnotationPresent(ToyAutowired.class)).map(Field::getType)
-                .map(fieldClass -> {
-                    if (fieldClass.isAnnotationPresent(ToyQualifier.class)) {
-                        return fieldClass.getAnnotation(ToyQualifier.class).value();
-                    } else {
-                        return getBeanIdByClassType(fieldClass, domainClass.getName());
-                    }
-                }).collect(Collectors.toList()));
+        Map<String, String> field2Dependencies = getFieldDependencies(domainClass);
+        beanProperty.setField2Dependencies(field2Dependencies);
+        beanProperty.setPrimary(domainClass.isAnnotationPresent(ToyPrimary.class));
         beanId2BeanProperty.put(beanId, beanProperty);
 
     }
@@ -200,34 +220,67 @@ public class ToyInnerContext {
         beanProperty.setBeanId(BeanNameUtils.getBeanId(method));
         beanProperty.setBeanGenerateType(BeanProperty.BeanGenerateType.MethodBean);
         beanProperty.setBeanType(method.getReturnType());
-        beanProperty.setNecessaryDependencies(Arrays.stream(method.getParameters())
+        List<String> necessaryDependencies = Arrays.stream(method.getParameters())
                 .map(parameter -> {
                     if (parameter.isAnnotationPresent(ToyQualifier.class)) {
                         return parameter.getAnnotation(ToyQualifier.class).value();
                     } else {
-                        return getBeanIdByClassType(parameter.getType(), method.getDeclaringClass().getName() + "." + method.getName());
+                        return getBeanIdByClassType(parameter.getType(), method.getDeclaringClass().getName() + "." + method.getName(),
+                                parameter.isAnnotationPresent(ToyAutowired.class) && parameter.getAnnotation(ToyAutowired.class).nullable());
                     }
-                }).collect(Collectors.toList()));
-        beanProperty.setFieldDependencies(Collections.emptyList());
+                }).collect(Collectors.toList());
+        // 还依赖于该方法声明的那个Class
+        String methodRestBeanId = getManagedBeanId(method.getDeclaringClass());
+        necessaryDependencies.add(methodRestBeanId);
+        beanProperty.setNecessaryDependencies(necessaryDependencies);
+        beanProperty.setMethodRestBeanId(methodRestBeanId);
+        Map<String, String> field2Dependencies = getFieldDependencies(method.getReturnType());
+        beanProperty.setField2Dependencies(field2Dependencies);
         beanProperty.setMethod(method);
+        beanProperty.setPrimary(method.isAnnotationPresent(ToyPrimary.class));
         beanId2BeanProperty.put(beanId, beanProperty);
 
     }
 
-    private String getBeanIdByClassType(Class<?> fieldClass, String domainBeanName) {
+    private Map<String, String> getFieldDependencies(Class<?> domainClass) {
+        Map<String, String> field2Dependencies = new HashMap<>();
+        for (Field declaredField : domainClass.getDeclaredFields()) {
+            if (declaredField.isAnnotationPresent(ToyAutowired.class)) {
+                if (declaredField.isAnnotationPresent(ToyQualifier.class)) {
+                    field2Dependencies.put(declaredField.getName(), declaredField.getAnnotation(ToyQualifier.class).value());
+                } else {
+                    field2Dependencies.put(declaredField.getName(),
+                            getBeanIdByClassType(declaredField.getType(), domainClass.getName(),
+                                    declaredField.isAnnotationPresent(ToyAutowired.class) && declaredField.getAnnotation(ToyAutowired.class).nullable()));
+                }
+            }
+        }
+        return field2Dependencies;
+    }
+
+    private String getBeanIdByClassType(Class<?> fieldClass, String domainBeanName, boolean nullable) {
 
         if (beanType2Primary.get(fieldClass) != null) {
             return beanType2Primary.get(fieldClass);
+        } else if (beanType2BeanIds.get(fieldClass) == null || beanType2BeanIds.get(fieldClass).size() == 0) {
+            // 缺少了一些对象，如果是nullable的，我们就创建一个"nullable"的beanProperty，其bean为null
+            if (nullable && beanId2BeanProperty.get("__nullableBeans__") == null) {
+                BeanProperty beanProperty = new BeanProperty();
+                beanProperty.setPrimary(false);
+                beanProperty.setBean(null);
+                beanProperty.setBeanId("__nullableBeans__");
+                beanId2BeanProperty.put("__nullableBeans__", beanProperty);
+                return "__nullableBeans__";
+            } else {
+                throw new ContextInitException(String
+                        .format("构建%s时尝试寻找类型为%s的类，但未找到", domainBeanName, fieldClass.getName()));
+            }
         } else if (beanType2BeanIds.get(fieldClass).size() == 1) {
             return beanType2BeanIds.get(fieldClass).get(0);
-        } else if (beanType2BeanIds.get(fieldClass).size() == 0) {
-            throw new ContextInitException(String
-                    .format("构建%s时尝试寻找类型为%s的类，但未找到", domainBeanName, fieldClass.getName()));
         } else {
             throw new ContextInitException(String
                     .format("构建%s时尝试寻找类型为%s的类，找到了不止一个，请考虑通过@ToyQualifier指定需要注入哪个bean，或使用@ToyPrimary", domainBeanName, fieldClass.getName()));
         }
-
     }
 
     /**
@@ -264,7 +317,7 @@ public class ToyInnerContext {
         for (Parameter parameter : parameters) {
             dependencies.add(getParameterRequireBeanName(parameter));
         }
-        //todo 从配偶文件里解析String等基本类型，还没做...
+        //todo 从配置文件里解析String等基本类型，还没做...
         return dependencies;
 
     }
@@ -291,7 +344,7 @@ public class ToyInnerContext {
     }
 
     private String getNameByBeanType(Class aClass) {
-        if (beanType2BeanIds.get(aClass).isEmpty()) {
+        if (beanType2BeanIds.get(aClass) == null || beanType2BeanIds.get(aClass).isEmpty()) {
             throw new ContextInitException(String.format("context中没有定义%s", aClass.getName()));
         } else if (beanType2BeanIds.get(aClass).size() > 1) {
             throw new ContextInitException(String.format("context中发现多个%s", aClass.getName()));
