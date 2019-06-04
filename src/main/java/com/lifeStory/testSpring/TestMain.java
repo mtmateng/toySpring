@@ -1,6 +1,7 @@
 package com.lifeStory.testSpring;
 
 import com.lifeStory.testSpring.model.*;
+import com.lifeStory.testSpring.model.testDependencyAbsence.TestConstructDepAbsence;
 import com.lifeStory.testSpring.model.testDependencyAbsence.TestFieldDepAbsence;
 import com.lifeStory.testSpring.model.testName.TestAutowired;
 import com.lifeStory.testSpring.model.testName.TestBeanName;
@@ -26,6 +27,8 @@ public class TestMain {
         System.out.println(context.getBean(TestComponentName.class));
         System.out.println(context.getBean(TestBeanName.class));
         System.out.println(context.getBean(TestFieldDepAbsence.class));
+        System.out.println(context.getBean(TestConstructDepAbsence.class));
+        System.out.println(context.getBean(TestALot.class));
 
     }
 
