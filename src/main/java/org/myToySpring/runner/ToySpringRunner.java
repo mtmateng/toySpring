@@ -1,15 +1,15 @@
 package org.myToySpring.runner;
 
 import org.myToySpring.annotations.ToyComponentScan;
-import org.myToySpring.context.ToySpringContext;
+import org.myToySpring.context.ToySpringBeanContext;
 
 import java.lang.annotation.Annotation;
 
 public class ToySpringRunner {
 
-    public static ToySpringContext run(Class<?> mainClass, String[] args) {
+    public static ToySpringBeanContext run(Class<?> mainClass, String[] args) {
 
-        ToySpringContext context = new ToySpringContext();
+        ToySpringBeanContext context = new ToySpringBeanContext();
 
         Annotation[] annotations = mainClass.getAnnotations();
         for (Annotation annotation : annotations) {
@@ -21,7 +21,7 @@ public class ToySpringRunner {
 
     }
 
-    private static void buildContext(Class<?> mainClass, ToySpringContext context) {
+    private static void buildContext(Class<?> mainClass, ToySpringBeanContext context) {
 
         ToyInnerContext toyInnerContext = new ToyInnerContext(mainClass);
         for (String beanId : toyInnerContext.getBeanId2BeanProperty().keySet()) {

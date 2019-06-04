@@ -1,0 +1,4 @@
+spring:
+  testParam1: testParam1
+  testParam2:
+    deepParam: deepParam

@@ -7,7 +7,7 @@ import com.lifeStory.testSpring.model.testName.TestAutowired;
 import com.lifeStory.testSpring.model.testName.TestBeanName;
 import com.lifeStory.testSpring.model.testName.TestComponentName;
 import org.myToySpring.annotations.ToyComponentScan;
-import org.myToySpring.context.ToySpringContext;
+import org.myToySpring.context.ToySpringBeanContext;
 import org.myToySpring.runner.ToySpringRunner;
 
 @ToyComponentScan
@@ -15,7 +15,7 @@ public class TestMain {
 
     public static void main(String[] args) {
 
-        ToySpringContext context = ToySpringRunner.run(TestMain.class, args);
+        ToySpringBeanContext context = ToySpringRunner.run(TestMain.class, args);
         System.out.println(context.getBean(TestClassAnnotation.class));
         System.out.println(context.getBean(TestConstructor.class));
         System.out.println(context.getBean(TestAutowired.class));

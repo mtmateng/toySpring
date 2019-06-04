@@ -7,7 +7,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class ToySpringContext {
+public class ToySpringBeanContext {
 
     private final Map<String, Object> name2BeanMap = new HashMap<>();
     private final Map<Class, List<Object>> beanType2Bean = new HashMap<>();
