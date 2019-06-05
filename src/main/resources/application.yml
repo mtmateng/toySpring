@@ -6,6 +6,7 @@ spring:
 test.hello.nihao: buhao
 test:
   hello.nibuhao: 1
+  hello.haoma: true
   hello.list:
     - a
     - b

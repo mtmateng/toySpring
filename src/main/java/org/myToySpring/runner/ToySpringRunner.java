@@ -25,12 +25,12 @@ public class ToySpringRunner {
 
     private static void buildContext(Class<?> mainClass, ToySpringBeanContext context, ToySpringConfigurationContext configurationContext) {
 
-        ToyInnerContext toyInnerContext = new ToyInnerContext(mainClass,configurationContext);
+        ToyInnerContext toyInnerContext = new ToyInnerContext(mainClass, configurationContext);
         for (String beanId : toyInnerContext.getBeanId2BeanProperty().keySet()) {
             context.registerBean(beanId, toyInnerContext.getBeanId2BeanProperty().get(beanId).getBean());
             context.registerBean(toyInnerContext.getBeanId2BeanProperty().get(beanId).getBeanType(),
-                    toyInnerContext.getBeanId2BeanProperty().get(beanId).getBean(),
-                    toyInnerContext.getBeanId2BeanProperty().get(beanId).isPrimary());
+                toyInnerContext.getBeanId2BeanProperty().get(beanId).getBean(),
+                toyInnerContext.getBeanId2BeanProperty().get(beanId).isPrimary());
         }
 
     }
