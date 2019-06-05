@@ -2,3 +2,11 @@ spring:
   testParam1: testParam1
   testParam2:
     deepParam: deepParam
+
+test.hello.nihao: buhao
+test:
+  hello.nibuhao: 1
+  hello.list:
+    - a
+    - b
+    - c
