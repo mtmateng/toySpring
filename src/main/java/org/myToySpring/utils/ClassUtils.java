@@ -37,7 +37,7 @@ public class ClassUtils {
         List<Class<?>> returnList = new ArrayList<>();
         for (Class child : getAllClassInPackage(packageName)) {
             for (Class annotation : annotations) {
-                if (child.isAnnotationPresent(annotation)){
+                if (child.isAnnotationPresent(annotation)) {
                     returnList.add(child);
                     break;
                 }
@@ -66,7 +66,7 @@ public class ClassUtils {
                     String beanName = getBeanName(declaredMethod);
                     if (result.putIfAbsent(beanName, declaredMethod) != null) {
                         throw new ContextInitException(String.format("在初始化%s时出现了同名Bean,method是%s:%s()"
-                                , beanName, declaredMethod.getDeclaringClass().getName(), declaredMethod.getName()));
+                            , beanName, declaredMethod.getDeclaringClass().getName(), declaredMethod.getName()));
                     }
                 }
             }
@@ -102,7 +102,7 @@ public class ClassUtils {
 
 
     private static List<Class<?>> findClass(File directory, String packageName)
-            throws ClassNotFoundException {
+        throws ClassNotFoundException {
         List<Class<?>> classes = new ArrayList<>();
         if (!directory.exists()) {
             return classes;

@@ -11,6 +11,8 @@ import org.myToySpring.exceptions.ContextInitException;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.util.*;
 
 /**
@@ -31,6 +33,11 @@ public class ToySpringConfigurationContext {
     private final Map<String, Object> configurationMap = new HashMap<>();
     private static final YAMLFactory yamlFactory = new YAMLFactory();
     private static final ObjectMapper mapper = new ObjectMapper();
+    private static final Set<Class> CONFIGURABLE_PARAMETER_CLASS = new HashSet<>(Arrays.asList(
+        int.class, Integer.class, float.class, Float.class, boolean.class, Boolean.class,
+        double.class, Double.class, String.class,
+        Long.class, long.class
+    ));
 
     public ToySpringConfigurationContext(String[] args) {
 
@@ -51,31 +58,62 @@ public class ToySpringConfigurationContext {
     }
 
     @SuppressWarnings("unchecked")
-    public <T> T getValue(String key, Class<T> tClass) {
+    public <T> T getValue(String key, Class<T> tClass, Type type) {
 
         if (configurationMap.get(key) == null) {
             throw new ContextInitException(String.format("尝试寻找key为%s的配置参数，但未找到", key));
         }
 
         if (List.class.isAssignableFrom(tClass) || ArrayList.class.isAssignableFrom(tClass)) {
+            Class payloadClass = getPayloadType(type, key);
+            ArrayList value = new ArrayList();
             if (configurationMap.get(key) instanceof ArrayList) {
-                return (T) new ArrayList((ArrayList) configurationMap.get(key));
+                for (Object object : (ArrayList) configurationMap.get(key)) {
+                    value.add(getRealValue(object, payloadClass, key));
+                }
+                return (T) value;
+            } else throw new ContextInitException(String.format("key为%s的配置参数不能被转化为%s", key, tClass.getName()));
+        }
+        return (T) getRealValue(configurationMap.get(key), tClass, key);
+
+    }
+
+    private Object getRealValue(Object object, Class tClass, String key) {
+
+        try {
+            if (tClass == String.class) {
+                return object.toString();
+            } else if (tClass == int.class || tClass == Integer.class) {
+                return Integer.valueOf(object.toString());
+            } else if (tClass == boolean.class || tClass == Boolean.class) {
+                return Boolean.valueOf(object.toString());
+            } else if (tClass == float.class || tClass == Float.class) {
+                return Float.valueOf(object.toString());
+            } else if (tClass == double.class || tClass == Double.class) {
+                return Double.valueOf(object.toString());
+            } else if (tClass == long.class || tClass == Long.class) {
+                return Long.valueOf(object.toString());
             }
-        } else if (tClass == String.class) {
-            return (T) configurationMap.get(key).toString();
-        } else if (tClass == int.class || tClass == Integer.class) {
-            return (T) Integer.valueOf(configurationMap.get(key).toString());
-        } else if (tClass == boolean.class || tClass == Boolean.class) {
-            return (T) Boolean.valueOf(configurationMap.get(key).toString());
-        } else if (tClass == float.class || tClass == Float.class) {
-            return (T) Float.valueOf(configurationMap.get(key).toString());
-        } else if (tClass == double.class || tClass == Double.class) {
-            return (T) Double.valueOf(configurationMap.get(key).toString());
-        } else if (tClass == long.class || tClass == Long.class) {
-            return (T) Long.valueOf(configurationMap.get(key).toString());
+        } catch (Exception e) {
+            throw new ContextInitException(String.format("key为%s的配置参数，值为%s，不能被转化为%s", key, object, tClass.getName()), e);
         }
 
-        throw new ContextInitException(String.format("key为%s的配置参数不能被转化为%s", key, tClass.getName()));
+        throw new ContextInitException(String.format("key为%s的配置参数，值为%s，不能被转化为%s", key, object, tClass.getName()));
+
+    }
+
+    private Class getPayloadType(Type type, String key) {
+
+        if (type instanceof ParameterizedType) {
+            Type paramType = ((ParameterizedType) type).getActualTypeArguments()[0];
+            if (!(paramType instanceof Class) || !CONFIGURABLE_PARAMETER_CLASS.contains(paramType)) {
+                throw new RuntimeException(String.format("key为%s的参数，其List的参数化类型%s不能解析", key, paramType.getTypeName()));
+            }
+            return (Class) paramType;
+        } else if (type instanceof Class) {
+            return Object.class;
+        }
+        return Object.class;
     }
 
     private void parseArgs(String[] args) {
@@ -130,7 +168,7 @@ public class ToySpringConfigurationContext {
 
     private File getProfileFile(String profileName) {
 
-        String ymlFile = "application" + profileName + ".yml";
+        String ymlFile = "application" + (profileName.equals("") ? "" : "-" + profileName) + ".yml";
         if (this.getClass().getClassLoader().getResource(ymlFile) == null) {
             return null;
         } else {

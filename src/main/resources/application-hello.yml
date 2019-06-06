@@ -1,0 +1,2 @@
+spring:
+  testParam1: testParam1InHello

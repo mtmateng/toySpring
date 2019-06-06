@@ -1,6 +1,5 @@
 package org.myToySpring.runner;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Getter;
 import org.myToySpring.annotations.*;
 import org.myToySpring.constants.ComponentAnnotations;
@@ -264,7 +263,7 @@ class ToyInnerContext {
                     }
                 } else if (parameter.isAnnotationPresent(ToyValue.class)) {
                     String valueId = "@MethodId" + method.getDeclaringClass().getName() + method.getName() + parameter.getName();
-                    valueId2Value.put(valueId, configurationContext.getValue(parameter.getAnnotation(ToyValue.class).value(), parameter.getType()));
+                    valueId2Value.put(valueId, configurationContext.getValue(parameter.getAnnotation(ToyValue.class).value(), parameter.getType(), parameter.getParameterizedType()));
                     return valueId;
                 } else {
                     return getBeanIdByClassType(parameter.getType(), method.getDeclaringClass().getName() + "." + method.getName(),
@@ -303,7 +302,7 @@ class ToyInnerContext {
                 }
             } else if (declaredField.isAnnotationPresent(ToyValue.class)) {
                 String valueId = "@FieldId" + declaredField.getDeclaringClass().getName() + declaredField.getName();
-                valueId2Value.put(valueId, configurationContext.getValue(declaredField.getAnnotation(ToyValue.class).value(), declaredField.getType()));
+                valueId2Value.put(valueId, configurationContext.getValue(declaredField.getAnnotation(ToyValue.class).value(), declaredField.getType(), declaredField.getGenericType()));
                 field2Dependencies.put(declaredField.getName(), valueId);
             }
         }
@@ -374,7 +373,7 @@ class ToyInnerContext {
                     // @Value注入的就解一下
                     String valueId = "@ConsParamId" + constructor.getDeclaringClass().getName() + constructor.getName() + parameter.getName();
                     dependencies.add(valueId);
-                    valueId2Value.put(valueId, configurationContext.getValue(parameter.getAnnotation(ToyValue.class).value(), parameter.getType()));
+                    valueId2Value.put(valueId, configurationContext.getValue(parameter.getAnnotation(ToyValue.class).value(), parameter.getType(), parameter.getParameterizedType()));
                 } else {
                     throw new ContextInitException(String.format("%s的构造函数中的参数%s不支持注入Bean的类型，请考虑用@ToyValue导入",
                         constructor.getDeclaringClass(), parameter.getName()));
