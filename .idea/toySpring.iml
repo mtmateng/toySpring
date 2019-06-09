@@ -17,5 +17,7 @@
     <orderEntry type="library" name="Maven: org.yaml:snakeyaml:1.23" level="project" />
     <orderEntry type="library" name="Maven: com.fasterxml.jackson.core:jackson-databind:2.9.9" level="project" />
     <orderEntry type="library" name="Maven: com.fasterxml.jackson.core:jackson-annotations:2.9.0" level="project" />
+    <orderEntry type="library" name="Maven: cglib:cglib:3.2.12" level="project" />
+    <orderEntry type="library" name="Maven: org.ow2.asm:asm:7.1" level="project" />
   </component>
 </module>

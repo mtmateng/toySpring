@@ -3,6 +3,7 @@ package com.lifeStory.testSpring;
 import com.lifeStory.testSpring.model.*;
 import com.lifeStory.testSpring.model.testDependencyAbsence.TestConstructDepAbsence;
 import com.lifeStory.testSpring.model.testDependencyAbsence.TestFieldDepAbsence;
+import com.lifeStory.testSpring.model.testInterface.InjectInterface;
 import com.lifeStory.testSpring.model.testMethodBeanFieldInject.NotComponent;
 import com.lifeStory.testSpring.model.testName.TestAutowired;
 import com.lifeStory.testSpring.model.testName.TestBeanName;
@@ -32,6 +33,7 @@ public class TestMain {
         System.out.println(context.getBean(TestALot.class));
         System.out.println(context.getBean(NotComponent.class));
         System.out.println(context.getBean(TestToyValue.class));
+        System.out.println(context.getBean(InjectInterface.class));
 
     }
 

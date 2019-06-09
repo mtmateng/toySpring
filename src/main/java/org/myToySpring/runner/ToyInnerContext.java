@@ -31,7 +31,7 @@ class ToyInnerContext {
     private final Map<String, Method> beanId2BeanMethod = new HashMap<>();
     private final Map<String, Object> valueId2Value = new HashMap<>();
     private final Map<Class, List<String>> beanType2BeanIds = new HashMap<>();
-    private final Map<Class, String> beanType2Primary = new HashMap<>();
+    private final Map<Class, List<String>> beanType2Primary = new HashMap<>();
     private final ToySpringConfigurationContext configurationContext;
 
     private static final String NULLABLE_BEAN_ID = "@__nullableBeans__";
@@ -62,9 +62,7 @@ class ToyInnerContext {
         // 再从这些@Component类中找出带有@Bean标注的方法
         Map<String, Method> beanId2BeanGenerationMethod = ClassUtils.getBeanGenerationMethods(classes, mainClass);
         for (String beanId : beanId2BeanGenerationMethod.keySet()) {
-            registerBeanMethod(beanId, beanId2BeanGenerationMethod.get(beanId));
-            registerBean(beanId, getReturnBeanType(beanId2BeanGenerationMethod.get(beanId)),
-                beanId2BeanGenerationMethod.get(beanId).isAnnotationPresent(ToyPrimary.class));
+            registerBeanMethod(beanId, beanId2BeanGenerationMethod.get(beanId), beanId2BeanGenerationMethod.get(beanId).isAnnotationPresent(ToyPrimary.class));
         }
 
         //开始第二遍扫描，构建BeanProperty
@@ -201,7 +199,7 @@ class ToyInnerContext {
         return method.getReturnType();
     }
 
-    private void registerBeanMethod(String beanId, Method method) {
+    private void registerBeanMethod(String beanId, Method method, Boolean primary) {
 
         checkBeanId(beanId);
         if (beanId2BeanMethod.containsKey(beanId)) {
@@ -209,6 +207,21 @@ class ToyInnerContext {
                 beanId, beanId2BeanType.get(beanId)));
         }
         beanId2BeanMethod.put(beanId, method);
+        registerBeanType2BeanIdsAndPrimary(beanId, getReturnBeanType(method), primary);
+    }
+
+    private void registerBeanType2BeanIdsAndPrimary(String beanId, Class aClass, Boolean primary) {
+
+        for (Class anInterface : aClass.getInterfaces()) {
+            beanType2BeanIds.putIfAbsent(anInterface, new ArrayList<>());
+            if (!beanType2BeanIds.get(anInterface).contains(beanId)) {
+                beanType2BeanIds.get(anInterface).add(beanId);
+            }
+        }
+        beanType2BeanIds.putIfAbsent(aClass, new ArrayList<>());
+        beanType2BeanIds.get(aClass).add(beanId);
+        registerPrimary(primary, aClass, beanId);
+
     }
 
     private void registerBean(String beanId, Class aClass, Boolean primary) {
@@ -220,9 +233,7 @@ class ToyInnerContext {
                 beanId, aClass.getName(), beanId2BeanType.get(beanId).getName()));
         }
         beanId2BeanType.put(beanId, aClass);
-        beanType2BeanIds.putIfAbsent(aClass, new ArrayList<>());
-        beanType2BeanIds.get(aClass).add(beanId);
-        registerPrimary(primary, aClass, beanId);
+        registerBeanType2BeanIdsAndPrimary(beanId, aClass, primary);
 
     }
 
@@ -312,17 +323,19 @@ class ToyInnerContext {
     private String getBeanIdByClassType(Class<?> fieldClass, String domainBeanName, boolean nullable) {
 
         if (beanType2Primary.get(fieldClass) != null) {
-            return beanType2Primary.get(fieldClass);
+            return beanType2Primary.get(fieldClass).get(0);
         } else if (beanType2BeanIds.get(fieldClass) == null || beanType2BeanIds.get(fieldClass).size() == 0) {
             // 缺少了一些对象，如果是nullable的，我们就创建一个"nullable"的beanProperty，其bean为null
-            if (nullable && beanId2BeanProperty.get(NULLABLE_BEAN_ID) == null) {
-                BeanProperty beanProperty = new BeanProperty();
-                beanProperty.setPrimary(false);
-                beanProperty.setBean(null);
-                beanProperty.setBeanId(NULLABLE_BEAN_ID);
-                beanProperty.setNecessaryDependencies(Collections.emptyList());
-                beanProperty.setField2Dependencies(Collections.emptyMap());
-                beanId2BeanProperty.put(NULLABLE_BEAN_ID, beanProperty);
+            if (nullable) {
+                if (beanId2BeanProperty.get(NULLABLE_BEAN_ID) == null) {
+                    BeanProperty beanProperty = new BeanProperty();
+                    beanProperty.setPrimary(false);
+                    beanProperty.setBean(null);
+                    beanProperty.setBeanId(NULLABLE_BEAN_ID);
+                    beanProperty.setNecessaryDependencies(Collections.emptyList());
+                    beanProperty.setField2Dependencies(Collections.emptyMap());
+                    beanId2BeanProperty.put(NULLABLE_BEAN_ID, beanProperty);
+                }
                 return NULLABLE_BEAN_ID;
             } else {
                 throw new ContextInitException(String
@@ -394,19 +407,22 @@ class ToyInnerContext {
         String beanId;
         if (parameter.isAnnotationPresent(ToyQualifier.class)) {        //如果有Qualifier标注，那么用指定的ID
             beanId = parameter.getAnnotation(ToyQualifier.class).value();
-            if (parameter.getType() == beanId2BeanType.get(beanId)) {
+            if (parameter.getType() == beanId2BeanType.get(beanId) || parameter.getType() == beanId2BeanMethod.get(beanId).getReturnType()) {
                 return parameter.getAnnotation(ToyQualifier.class).value();
             } else {
                 throw new ContextInitException(String.format("类型为%s的参数：%s试图通过ToyQualifier组装Id为%s的bean，但该bean类型为%s",
                     parameter.getType().getName(), parameter.getName(), beanId, beanId2BeanType.get(beanId)));
             }
         } else if (beanType2Primary.get(parameter.getType()) != null) {     //或者用primary类的Id
-            beanId = beanType2Primary.get(parameter.getType());
+            if (beanType2Primary.get(parameter.getType()).size() > 1) {
+                throw new ContextInitException(String.format("%s注册了多个primary Bean，请检查", parameter.getType()));
+            }
+            beanId = beanType2Primary.get(parameter.getType()).get(0);
         } else {       //接下来去找class对应的ID，当然了，如果此时同一个类还有多个Bean，那就会抛异常咯
             beanId = getNameByBeanType(parameter.getType(), nullable);
         }
 
-        if (!beanId.equals(NULLABLE_BEAN_ID) && beanId2BeanType.get(beanId) == null) {       //根本没有这个Id的bean
+        if (!beanId.equals(NULLABLE_BEAN_ID) && beanId2BeanType.get(beanId) == null && beanId2BeanMethod.get(beanId) == null) {       //根本没有这个Id的bean
             throw new ContextInitException(String.format("尝试寻找Id为%s的类，但并不存在", beanId));
         }
         return beanId;
@@ -448,10 +464,18 @@ class ToyInnerContext {
         if (!primary) {
             return;
         }
-        if (beanType2Primary.containsKey(aClass)) {
-            throw new ContextInitException(String.format("为类型为%s的标注了两个Primary，请检查", aClass.getName()));
+        beanType2Primary.putIfAbsent(aClass, new ArrayList<>());
+        beanType2Primary.get(aClass).add(beanId);
+        // 这样简单粗暴带来了一个潜在问题，如果我虽然为某个接口注册了两个Primary，但实际上这个接口是一个顶级接口
+        // 顶级接口下面出现了两个接口，我们实际上只用了这两个接口做注入，而且都有好几个实现，我们为这两个接口的某个实现
+        // 标注了primary，但这个顶级接口就会出现俩Primary。实际可以不出错的情况就出错了。
+        // 所以应该将primary的解析推迟到请求组装时。如果我们没有请求组装这个顶级接口，那又何妨注册两个子接口的Primary呢
+        for (Class anInterface : aClass.getInterfaces()) {
+            beanType2Primary.putIfAbsent(anInterface, new ArrayList<>());
+            if (!beanType2Primary.get(anInterface).contains(beanId)) {
+                beanType2Primary.get(anInterface).add(beanId);
+            }
         }
-        beanType2Primary.put(aClass, beanId);
 
     }
 
